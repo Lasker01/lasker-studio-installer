@@ -1,0 +1,12 @@
+{
+  "panelName": "com.lasker.studio.cep",
+  "displayName": "Lasker Studio",
+  "version": "0.0.1",
+  "publisher": "Lasker Studio",
+  "description": "Adobe CEP Panel for Lasker Studio - Premiere Pro Extension",
+  "appId": "{8F0B3F1C-9A2D-4E5F-B6C7-3D8E9F0A1B2C}",
+  "paths": {
+    "windows": "C:\\Program Files (x86)\\Common Files\\Adobe\\CEP\\extensions",
+    "macos": "/Library/Application Support/Adobe/CEP/extensions"
+  }
+}

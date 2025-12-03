@@ -1,0 +1,26 @@
+# 빌드 출력
+dist/
+build/
+
+# Node modules
+node_modules/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 로그
+*.log
+
+# 임시 파일
+*.tmp
+*.bak
