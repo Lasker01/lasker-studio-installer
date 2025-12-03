@@ -3496,23 +3496,59 @@ $._PPP_={
 	},
 
 	/**
-	 * getSequenceSnapshot: \ud2b9\uc815 \uc2dc\ud000\uc2a4\uc758 \uc0c1\uc138 \uc815\ubcf4\ub97c \uac00\uc838\uc634
+	 * openSequenceByGuid: GUID로 시퀀스 열기
+	 */
+	openSequenceByGuid: function(guid) {
+		try {
+			if (!app.project || !app.project.sequences) {
+				return { success: false, error: "No project or sequences available" };
+			}
+
+			var numSequences = app.project.sequences.numSequences;
+			for (var i = 0; i < numSequences; i++) {
+				var seq = app.project.sequences[i];
+				if (seq && seq.sequenceID === guid) {
+					// Open the sequence
+					app.project.openSequence(seq.sequenceID);
+					return { success: true, name: seq.name };
+				}
+			}
+
+			return { success: false, error: "Sequence not found with GUID: " + guid };
+		} catch (e) {
+			return { success: false, error: e.toString() };
+		}
+	},
+
+	/**
+	 * getSequenceSnapshot: 특정 시퀀스의 상세 정보를 가져옴
+	 * @param sequenceId - sequence index (number) 또는 GUID (string)
 	 */
 	getSequenceSnapshot: function(sequenceId) {
 		if (!app.project || !app.project.sequences) {
 			return null;
 		}
 
+		var sequence = null;
+
+		// Try to parse as index first
 		var sequenceIndex = parseInt(sequenceId);
-		if (isNaN(sequenceIndex) || sequenceIndex < 0) {
-			return null;
+		if (!isNaN(sequenceIndex) && sequenceIndex >= 0 && sequenceIndex < app.project.sequences.numSequences) {
+			sequence = app.project.sequences[sequenceIndex];
 		}
 
-		if (sequenceIndex >= app.project.sequences.numSequences) {
-			return null;
+		// If not found by index, try to find by GUID
+		if (!sequence) {
+			var numSequences = app.project.sequences.numSequences;
+			for (var i = 0; i < numSequences; i++) {
+				var seq = app.project.sequences[i];
+				if (seq && seq.sequenceID === sequenceId) {
+					sequence = seq;
+					break;
+				}
+			}
 		}
 
-		var sequence = app.project.sequences[sequenceIndex];
 		if (!sequence) {
 			return null;
 		}
@@ -5473,22 +5509,39 @@ $._PPP_={
 			// Ticks per second constant
 			var TICKS_PER_SECOND = 254016000000;
 
-			// Collect unique cut times from scene boundaries
-			var cutTimesMap = {};
-			for (var i = 0; i < scenesArray.length; i++) {
-				var scene = scenesArray[i];
-				if (scene.startSec > 0.01) {
-					cutTimesMap[Math.round(scene.startSec * 1000)] = scene.startSec;
+			// Use allCutTimes from options if provided (contains cut times from ALL layers)
+			// Otherwise fall back to collecting from scenesArray (single layer)
+			var uniqueTimes = [];
+
+			if (opts.allCutTimes && opts.allCutTimes.length > 0) {
+				// Use pre-collected cut times from all layers
+				logFile.writeln("Using allCutTimes from options (" + opts.allCutTimes.length + " times from all layers)");
+				for (var i = 0; i < opts.allCutTimes.length; i++) {
+					var cutTime = opts.allCutTimes[i];
+					// Skip times very close to 0
+					if (cutTime > 0.01) {
+						uniqueTimes.push(cutTime);
+					}
 				}
-				cutTimesMap[Math.round(scene.endSec * 1000)] = scene.endSec;
+			} else {
+				// Fallback: Collect unique cut times from scene boundaries (single layer)
+				logFile.writeln("Fallback: collecting cut times from scenesArray");
+				var cutTimesMap = {};
+				for (var i = 0; i < scenesArray.length; i++) {
+					var scene = scenesArray[i];
+					if (scene.startSec > 0.01) {
+						cutTimesMap[Math.round(scene.startSec * 1000)] = scene.startSec;
+					}
+					cutTimesMap[Math.round(scene.endSec * 1000)] = scene.endSec;
+				}
+
+				for (var key in cutTimesMap) {
+					if (cutTimesMap.hasOwnProperty(key)) {
+						uniqueTimes.push(cutTimesMap[key]);
+					}
+				}
 			}
 
-			var uniqueTimes = [];
-			for (var key in cutTimesMap) {
-				if (cutTimesMap.hasOwnProperty(key)) {
-					uniqueTimes.push(cutTimesMap[key]);
-				}
-			}
 			// Sort in DESCENDING order - process from end to start
 			uniqueTimes.sort(function(a, b) { return b - a; });
 
@@ -5682,113 +5735,158 @@ $._PPP_={
 					'Insert': 3     // Lavender
 				};
 
-				logFile.writeln("\n=== Applying Clip Labels (Overwrite Method) ===");
+				logFile.writeln("\n=== Applying Clip Labels (Per-Track Method) ===");
 
-				for (var si = 0; si < scenesArray.length; si++) {
-				var scene = scenesArray[si];
-				var classification = scene.classification;
+				// Get scenesByTrack from options (each track has its own scene data)
+				var scenesByTrack = opts.scenesByTrack || {};
+				logFile.writeln("scenesByTrack keys: " + Object.keys(scenesByTrack).join(", "));
 
-				if (!classification || labelIndexMap[classification] === undefined) {
-					continue;
-				}
-
-				var targetLabel = labelIndexMap[classification];
-				var sceneStartTicks = Math.round(scene.startSec * TICKS_PER_SECOND);
-				var sceneEndTicks = Math.round(scene.endSec * TICKS_PER_SECOND);
-				var margin = TICKS_PER_SECOND * 0.1;
-
-				logFile.writeln("\nScene " + (si + 1) + ": " + scene.startSec + "s - " + scene.endSec + "s, " + classification + " -> label " + targetLabel);
-
-				// Process video tracks
+				// Process each video track with its own scene data
 				for (var vt = 0; vt < numVideoTracks; vt++) {
+					var trackScenes = scenesByTrack[vt] || scenesByTrack[String(vt)];
+
+					// If no track-specific scenes, skip this track (fallback: use scenesArray for V1 only)
+					if (!trackScenes && vt === 0) {
+						trackScenes = scenesArray;
+					}
+					if (!trackScenes || trackScenes.length === 0) {
+						logFile.writeln("\nV" + vt + ": No scenes for this track, skipping labels");
+						continue;
+					}
+
+					logFile.writeln("\nV" + vt + ": Processing " + trackScenes.length + " scenes");
+
 					var videoTrack = targetSequence.videoTracks[vt];
 					var numClips = videoTrack.clips.numItems;
 
-					for (var ci = 0; ci < numClips; ci++) {
-						var clip = videoTrack.clips[ci];
-						if (!clip || !clip.projectItem) continue;
+					for (var si = 0; si < trackScenes.length; si++) {
+						var scene = trackScenes[si];
+						var classification = scene.classification;
 
-						var clipStartTicks = parseInt(clip.start.ticks);
+						if (!classification || labelIndexMap[classification] === undefined) {
+							continue;
+						}
 
-						if (clipStartTicks >= sceneStartTicks - margin && clipStartTicks < sceneEndTicks - margin) {
-							try {
-								var projectItem = clip.projectItem;
-								var clipStartSec = clipStartTicks / TICKS_PER_SECOND;
-								var clipInPointTicks = parseInt(clip.inPoint.ticks);
-								var clipOutPointTicks = parseInt(clip.outPoint.ticks);
+						var targetLabel = labelIndexMap[classification];
+						var sceneStartTicks = Math.round(scene.startSec * TICKS_PER_SECOND);
+						var sceneEndTicks = Math.round(scene.endSec * TICKS_PER_SECOND);
+						var margin = TICKS_PER_SECOND * 0.1;
 
-								// 1. Save original projectItem settings
-								var origLabel = projectItem.getColorLabel();
-								var origInPoint = projectItem.getInPoint();
-								var origOutPoint = projectItem.getOutPoint();
+						logFile.writeln("  Scene " + (si + 1) + ": " + scene.startSec + "s - " + scene.endSec + "s, " + classification + " -> label " + targetLabel);
 
-								logFile.writeln("  V" + vt + " clip at " + clipStartSec.toFixed(2) + "s: origLabel=" + origLabel);
+						for (var ci = 0; ci < numClips; ci++) {
+							var clip = videoTrack.clips[ci];
+							if (!clip || !clip.projectItem) continue;
 
-								// 2. Set projectItem to desired label and in/out range
-								projectItem.setColorLabel(targetLabel);
-								projectItem.setInPoint(clipInPointTicks / TICKS_PER_SECOND, 4);
-								projectItem.setOutPoint(clipOutPointTicks / TICKS_PER_SECOND, 4);
+							var clipStartTicks = parseInt(clip.start.ticks);
 
-								// 3. Overwrite at the same position (replaces with newly labeled clip)
-								videoTrack.overwriteClip(projectItem, clipStartSec);
+							if (clipStartTicks >= sceneStartTicks - margin && clipStartTicks < sceneEndTicks - margin) {
+								try {
+									var projectItem = clip.projectItem;
+									var clipStartSec = clipStartTicks / TICKS_PER_SECOND;
+									var clipInPointTicks = parseInt(clip.inPoint.ticks);
+									var clipOutPointTicks = parseInt(clip.outPoint.ticks);
 
-								// 4. Restore original projectItem settings
-								projectItem.setColorLabel(origLabel);
-								projectItem.setInPoint(origInPoint.seconds, 4);
-								projectItem.setOutPoint(origOutPoint.seconds, 4);
+									// 1. Save original projectItem settings
+									var origLabel = projectItem.getColorLabel();
+									var origInPoint = projectItem.getInPoint();
+									var origOutPoint = projectItem.getOutPoint();
 
-								labelsApplied++;
-								logFile.writeln("    -> Label applied: " + targetLabel);
+									logFile.writeln("    Clip at " + clipStartSec.toFixed(2) + "s: origLabel=" + origLabel);
 
-							} catch (labelErr) {
-								logFile.writeln("  V" + vt + " clip label error: " + labelErr);
+									// 2. Set projectItem to desired label and in/out range
+									projectItem.setColorLabel(targetLabel);
+									projectItem.setInPoint(clipInPointTicks / TICKS_PER_SECOND, 4);
+									projectItem.setOutPoint(clipOutPointTicks / TICKS_PER_SECOND, 4);
+
+									// 3. Overwrite at the same position (replaces with newly labeled clip)
+									videoTrack.overwriteClip(projectItem, clipStartSec);
+
+									// 4. Restore original projectItem settings
+									projectItem.setColorLabel(origLabel);
+									projectItem.setInPoint(origInPoint.seconds, 4);
+									projectItem.setOutPoint(origOutPoint.seconds, 4);
+
+									labelsApplied++;
+									logFile.writeln("      -> Label applied: " + targetLabel);
+
+								} catch (labelErr) {
+									logFile.writeln("    Clip label error: " + labelErr);
+								}
 							}
 						}
 					}
 				}
 
-				// Process audio tracks
+				// Process audio tracks - use the corresponding video track's scenes
+				// A1 uses V1 scenes, A2 uses V2 scenes, etc.
 				for (var at = 0; at < numAudioTracks; at++) {
+					var audioTrackScenes = scenesByTrack[at] || scenesByTrack[String(at)];
+
+					// Fallback: use scenesArray for A1
+					if (!audioTrackScenes && at === 0) {
+						audioTrackScenes = scenesArray;
+					}
+					if (!audioTrackScenes || audioTrackScenes.length === 0) {
+						logFile.writeln("\nA" + at + ": No scenes for this track, skipping labels");
+						continue;
+					}
+
+					logFile.writeln("\nA" + at + ": Processing " + audioTrackScenes.length + " scenes");
+
 					var audioTrack = targetSequence.audioTracks[at];
 					var numAudioClips = audioTrack.clips.numItems;
 
-					for (var aci = 0; aci < numAudioClips; aci++) {
-						var audioClip = audioTrack.clips[aci];
-						if (!audioClip || !audioClip.projectItem) continue;
+					for (var asi = 0; asi < audioTrackScenes.length; asi++) {
+						var aScene = audioTrackScenes[asi];
+						var aClassification = aScene.classification;
 
-						var aClipStartTicks = parseInt(audioClip.start.ticks);
+						if (!aClassification || labelIndexMap[aClassification] === undefined) {
+							continue;
+						}
 
-						if (aClipStartTicks >= sceneStartTicks - margin && aClipStartTicks < sceneEndTicks - margin) {
-							try {
-								var aProjectItem = audioClip.projectItem;
-								var aClipStartSec = aClipStartTicks / TICKS_PER_SECOND;
-								var aClipInPointTicks = parseInt(audioClip.inPoint.ticks);
-								var aClipOutPointTicks = parseInt(audioClip.outPoint.ticks);
+						var aTargetLabel = labelIndexMap[aClassification];
+						var aSceneStartTicks = Math.round(aScene.startSec * TICKS_PER_SECOND);
+						var aSceneEndTicks = Math.round(aScene.endSec * TICKS_PER_SECOND);
+						var aMargin = TICKS_PER_SECOND * 0.1;
 
-								var aOrigLabel = aProjectItem.getColorLabel();
-								var aOrigInPoint = aProjectItem.getInPoint();
-								var aOrigOutPoint = aProjectItem.getOutPoint();
+						for (var aci = 0; aci < numAudioClips; aci++) {
+							var audioClip = audioTrack.clips[aci];
+							if (!audioClip || !audioClip.projectItem) continue;
 
-								aProjectItem.setColorLabel(targetLabel);
-								aProjectItem.setInPoint(aClipInPointTicks / TICKS_PER_SECOND, 4);
-								aProjectItem.setOutPoint(aClipOutPointTicks / TICKS_PER_SECOND, 4);
+							var aClipStartTicks = parseInt(audioClip.start.ticks);
 
-								audioTrack.overwriteClip(aProjectItem, aClipStartSec);
+							if (aClipStartTicks >= aSceneStartTicks - aMargin && aClipStartTicks < aSceneEndTicks - aMargin) {
+								try {
+									var aProjectItem = audioClip.projectItem;
+									var aClipStartSec = aClipStartTicks / TICKS_PER_SECOND;
+									var aClipInPointTicks = parseInt(audioClip.inPoint.ticks);
+									var aClipOutPointTicks = parseInt(audioClip.outPoint.ticks);
 
-								aProjectItem.setColorLabel(aOrigLabel);
-								aProjectItem.setInPoint(aOrigInPoint.seconds, 4);
-								aProjectItem.setOutPoint(aOrigOutPoint.seconds, 4);
+									var aOrigLabel = aProjectItem.getColorLabel();
+									var aOrigInPoint = aProjectItem.getInPoint();
+									var aOrigOutPoint = aProjectItem.getOutPoint();
 
-								labelsApplied++;
-								logFile.writeln("  A" + at + " clip at " + aClipStartSec.toFixed(2) + "s -> label " + targetLabel);
+									aProjectItem.setColorLabel(aTargetLabel);
+									aProjectItem.setInPoint(aClipInPointTicks / TICKS_PER_SECOND, 4);
+									aProjectItem.setOutPoint(aClipOutPointTicks / TICKS_PER_SECOND, 4);
 
-							} catch (aLabelErr) {
-								logFile.writeln("  A" + at + " clip label error: " + aLabelErr);
+									audioTrack.overwriteClip(aProjectItem, aClipStartSec);
+
+									aProjectItem.setColorLabel(aOrigLabel);
+									aProjectItem.setInPoint(aOrigInPoint.seconds, 4);
+									aProjectItem.setOutPoint(aOrigOutPoint.seconds, 4);
+
+									labelsApplied++;
+									logFile.writeln("    A" + at + " clip at " + aClipStartSec.toFixed(2) + "s -> label " + aTargetLabel);
+
+								} catch (aLabelErr) {
+									logFile.writeln("    A" + at + " clip label error: " + aLabelErr);
+								}
 							}
 						}
 					}
 				}
-			}
 			} // end if (applyLabels)
 
 			// === Disable clips on non-selected tracks ===
@@ -5995,6 +6093,9 @@ var getProjectSequences = function getProjectSequences() {
 var getProjectSequencesSimple = function getProjectSequencesSimple() {
   return $._PPP_.getProjectSequencesSimple();
 };
+var openSequenceByGuid = function openSequenceByGuid(guid) {
+  return $._PPP_.openSequenceByGuid(guid);
+};
 var getSequenceSnapshot = function getSequenceSnapshot(sequenceId) {
   return $._PPP_.getSequenceSnapshot(sequenceId);
 };
@@ -6052,6 +6153,7 @@ var ppro = /*#__PURE__*/__objectFreeze({
   helloWorld: helloWorld,
   navigateActiveSequenceToTime: navigateActiveSequenceToTime,
   navigateToTime: navigateToTime,
+  openSequenceByGuid: openSequenceByGuid,
   projectItemToSource: projectItemToSource,
   qeDomFunction: qeDomFunction,
   razorActiveSequenceAtSceneBoundaries: razorActiveSequenceAtSceneBoundaries,

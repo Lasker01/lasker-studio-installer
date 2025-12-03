@@ -41,15 +41,173 @@ else {
 </script>
 
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/assets/favicon-DZXH-TFq.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Debug Console</title>
-    
-    
-    <link rel="stylesheet" crossorigin href="../assets/index-DQa3HoSf.css">
+
+    <style>
+      body {
+        margin: 0;
+        background: #1a1a1a;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      #root {
+        min-height: 100vh;
+      }
+      .loader {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        color: #888;
+      }
+      .loader-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #333;
+        border-top-color: #61dafb;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      .loader-text {
+        margin-top: 16px;
+        font-size: 14px;
+      }
+      .loader-error {
+        color: #ff6b6b;
+        text-align: center;
+        padding: 20px;
+      }
+      .loader-retry {
+        margin-top: 12px;
+        padding: 8px 16px;
+        background: #333;
+        border: 1px solid #555;
+        color: #fff;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .loader-retry:hover {
+        background: #444;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
-    <script src="../assets/debug-CTchQ2dS.cjs"></script>
+    <div id="root">
+      <div class="loader">
+        <div class="loader-spinner"></div>
+        <div class="loader-text">Loading...</div>
+      </div>
+    </div>
+
+    <script>
+      (function() {
+        var CDN_BASE = 'https://lasker01.github.io/lasker-studio-cep';
+        var MANIFEST_URL = CDN_BASE + '/manifest.json';
+        var CACHE_KEY = 'lasker_studio_debug_cache';
+
+        function showError(message) {
+          var root = document.getElementById('root');
+          root.innerHTML =
+            '<div class="loader">' +
+              '<div class="loader-error">' +
+                '<p>' + message + '</p>' +
+                '<button class="loader-retry" onclick="location.reload()">Retry</button>' +
+              '</div>' +
+            '</div>';
+        }
+
+        function updateLoaderText(text) {
+          var loaderText = document.querySelector('.loader-text');
+          if (loaderText) loaderText.textContent = text;
+        }
+
+        function loadScript(url) {
+          return new Promise(function(resolve, reject) {
+            var script = document.createElement('script');
+            script.src = url;
+            script.onload = resolve;
+            script.onerror = reject;
+            document.body.appendChild(script);
+          });
+        }
+
+        function loadStyle(url) {
+          return new Promise(function(resolve, reject) {
+            var link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = url;
+            link.onload = resolve;
+            link.onerror = reject;
+            document.head.appendChild(link);
+          });
+        }
+
+        function getCache() {
+          try {
+            var cached = localStorage.getItem(CACHE_KEY);
+            return cached ? JSON.parse(cached) : null;
+          } catch (e) {
+            return null;
+          }
+        }
+
+        function setCache(manifest) {
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify(manifest));
+          } catch (e) {}
+        }
+
+        function loadApp(manifest) {
+          var files = manifest.files.debug;
+          if (!files) {
+            showError('Debug panel not available in this version');
+            return;
+          }
+          updateLoaderText('Loading debug v' + manifest.version + '...');
+
+          Promise.all([
+            loadStyle(CDN_BASE + '/' + files.css),
+            loadScript(CDN_BASE + '/' + files.js)
+          ])
+          .then(function() {
+            setCache(manifest);
+          })
+          .catch(function(err) {
+            showError('Failed to load debug resources');
+            console.error('Load error:', err);
+          });
+        }
+
+        function fetchManifest() {
+          updateLoaderText('Checking for updates...');
+
+          fetch(MANIFEST_URL + '?t=' + Date.now())
+            .then(function(res) {
+              if (!res.ok) throw new Error('HTTP ' + res.status);
+              return res.json();
+            })
+            .then(function(manifest) {
+              loadApp(manifest);
+            })
+            .catch(function(err) {
+              console.warn('Manifest fetch failed:', err);
+              var cached = getCache();
+              if (cached) {
+                updateLoaderText('Offline mode - using cached v' + cached.version);
+                setTimeout(function() { loadApp(cached); }, 500);
+              } else {
+                showError('Cannot connect to server.<br>Please check your internet connection.');
+              }
+            });
+        }
+
+        // Start loading
+        fetchManifest();
+      })();
+    </script>
   </body>
 </html>
