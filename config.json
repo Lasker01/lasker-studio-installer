@@ -1,12 +1,27 @@
 {
   "panelName": "com.lasker.studio.cep",
   "displayName": "Lasker Studio",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "publisher": "Lasker Studio",
-  "description": "Adobe CEP Panel for Lasker Studio - Premiere Pro Extension",
+  "description": "AI-powered video editing tools for Adobe Premiere Pro",
   "appId": "{8F0B3F1C-9A2D-4E5F-B6C7-3D8E9F0A1B2C}",
+  "bundleId": "com.lasker.studio.cep",
+  "copyright": "Copyright (c) 2024 Lasker Studio",
+  "website": "https://lasker-studio.com",
+  "support": "support@lasker-studio.com",
   "paths": {
     "windows": "C:\\Program Files (x86)\\Common Files\\Adobe\\CEP\\extensions",
     "macos": "/Library/Application Support/Adobe/CEP/extensions"
+  },
+  "signing": {
+    "macos": {
+      "identity": "",
+      "notarize": false,
+      "teamId": ""
+    },
+    "windows": {
+      "certificate": "",
+      "timestamp": "http://timestamp.digicert.com"
+    }
   }
 }

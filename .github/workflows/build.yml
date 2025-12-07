@@ -7,7 +7,7 @@ on:
       - 'v*'
   pull_request:
     branches: [main]
-  workflow_dispatch:  # 수동 실행 가능
+  workflow_dispatch:
 
 jobs:
   build-windows:
@@ -21,6 +21,13 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Get version from config.json
+        id: version
+        run: |
+          $version = (Get-Content config.json | ConvertFrom-Json).version
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
       - name: Install Inno Setup
         run: choco install innosetup -y
 
@@ -30,7 +37,7 @@ jobs:
       - name: Upload Windows Installer
         uses: actions/upload-artifact@v4
         with:
-          name: windows-installer
+          name: windows-installer-${{ steps.version.outputs.VERSION }}
           path: dist/windows/*.exe
           retention-days: 30
 
@@ -48,13 +55,19 @@ jobs:
       - name: Install jq
         run: brew install jq
 
+      - name: Get version from config.json
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' config.json)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Build macOS Installer
         run: npm run build:macos
 
       - name: Upload macOS Installer
         uses: actions/upload-artifact@v4
         with:
-          name: macos-installer
+          name: macos-installer-${{ steps.version.outputs.VERSION }}
           path: dist/macos/*.pkg
           retention-days: 30
 
@@ -63,21 +76,46 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
       - name: Download Windows Installer
         uses: actions/download-artifact@v4
         with:
-          name: windows-installer
+          name: windows-installer-${{ steps.version.outputs.VERSION }}
           path: dist/windows
 
       - name: Download macOS Installer
         uses: actions/download-artifact@v4
         with:
-          name: macos-installer
+          name: macos-installer-${{ steps.version.outputs.VERSION }}
           path: dist/macos
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
+          name: Lasker Studio v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## Lasker Studio v${{ steps.version.outputs.VERSION }}
+
+            ### 설치 방법
+
+            **macOS:**
+            1. `Lasker-Studio-${{ steps.version.outputs.VERSION }}-Installer.pkg` 다운로드
+            2. 더블클릭하여 설치
+            3. Adobe Premiere Pro 재시작
+
+            **Windows:**
+            1. `LaskerStudio-${{ steps.version.outputs.VERSION }}-Setup.exe` 다운로드
+            2. 실행하여 설치
+            3. Adobe Premiere Pro 재시작
+
+            ### 사용 방법
+            - Premiere Pro 메뉴: **Window > Extensions > Lasker Studio**
           files: |
             dist/windows/*.exe
             dist/macos/*.pkg
