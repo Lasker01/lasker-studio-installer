@@ -27,8 +27,8 @@ PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
-SetupIconFile=icon.ico
-UninstallDisplayIcon={app}\icon.ico
+; SetupIconFile=icon.ico  ; 아이콘 파일 추가 시 주석 해제
+; UninstallDisplayIcon={app}\icon.ico
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
