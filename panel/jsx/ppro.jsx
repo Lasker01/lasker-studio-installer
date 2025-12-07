@@ -1404,27 +1404,132 @@ $._PPP_={
 	// Define a couple of callback functions, for AME to use during render.
 
 	onEncoderJobComplete : function (jobID, outputFilePath) {
-		$._PPP_.updateEventPanel('onEncoderJobComplete called. jobID = ' + jobID + '.');
+		$._PPP_._logToFile('=== onEncoderJobComplete CALLED ===');
+		$._PPP_._logToFile('jobID: ' + jobID + ' (type: ' + typeof jobID + ')');
+		$._PPP_._logToFile('outputFilePath: ' + outputFilePath);
+		$._PPP_.updateEventPanel('onEncoderJobComplete called. jobID = ' + jobID + ', outputPath = ' + outputFilePath);
+
+		// jobID를 문자열로 변환하여 비교 (타입 불일치 방지)
+		var jobKey = String(jobID);
+		$._PPP_._logToFile('jobKey (stringified): ' + jobKey);
+
+		// 저장된 모든 키 출력
+		var allKeys = [];
+		for (var k in $._PPP_._compressionJobs) {
+			allKeys.push(k + ' (type: ' + typeof k + ')');
+		}
+		$._PPP_._logToFile('All stored keys: ' + JSON.stringify(allKeys));
+		$._PPP_.updateEventPanel('Looking for jobKey: ' + jobKey + ' in _compressionJobs');
+
+		// 압축 작업 완료 시 이벤트 발생
+		if ($._PPP_._compressionJobs && $._PPP_._compressionJobs[jobKey]) {
+			$._PPP_._logToFile('MATCH FOUND! Processing completion...');
+			var jobInfo = $._PPP_._compressionJobs[jobKey];
+			$._PPP_._logToFile('jobInfo: ' + JSON.stringify(jobInfo));
+
+			var eoName = Folder.fs === 'Macintosh' ? "PlugPlugExternalObject" : "PlugPlugExternalObject.dll";
+			$._PPP_._logToFile('Loading ExternalObject: ' + eoName);
+
+			try {
+				var plugplugLibrary = new ExternalObject("lib:" + eoName);
+				$._PPP_._logToFile('ExternalObject loaded: ' + (plugplugLibrary ? 'YES' : 'NO'));
+
+				if (plugplugLibrary) {
+					var eventData = {
+						jobID: jobKey,
+						success: true,
+						inputPath: jobInfo.inputPath,
+						outputPath: outputFilePath,
+						requestId: jobInfo.requestId
+					};
+					$._PPP_._logToFile('Event data: ' + JSON.stringify(eventData));
+
+					var eventObj = new CSXSEvent();
+					eventObj.type = "com.lasker.compression.complete";
+					eventObj.data = JSON.stringify(eventData);
+					eventObj.dispatch();
+					$._PPP_._logToFile('CSXSEvent dispatched successfully');
+					$._PPP_.updateEventPanel('Compression complete event dispatched for requestId: ' + jobInfo.requestId);
+				}
+			} catch (extErr) {
+				$._PPP_._logToFile('ExternalObject ERROR: ' + extErr.toString());
+			}
+			delete $._PPP_._compressionJobs[jobKey];
+		} else {
+			$._PPP_._logToFile('NO MATCH! jobKey not found in _compressionJobs');
+			$._PPP_.updateEventPanel('No compression job found for jobKey: ' + jobKey);
+			// 저장된 모든 jobID 출력 (디버깅용)
+			var keys = [];
+			for (var k in $._PPP_._compressionJobs) {
+				keys.push(k);
+			}
+			$._PPP_._logToFile('Available keys: ' + keys.join(', '));
+			$._PPP_.updateEventPanel('Available job keys: ' + keys.join(', '));
+		}
 	},
 
 	onEncoderJobError : function (jobID, errorMessage) {
-		var eoName = "";
-		if (Folder.fs === 'Macintosh') {
-			eoName = "PlugPlugExternalObject";
-		} else {
-			eoName = "PlugPlugExternalObject.dll";
-		}
-		var plugplugLibrary = new ExternalObject( "lib:" + eoName );
-		if (plugplugLibrary){
-			var eventObj	= new CSXSEvent();
-			eventObj.type	= "com.adobe.csxs.events.PProPanelRenderEvent";
-			eventObj.data	= "Job " + jobID + " failed, due to " + errorMessage + ".";
+		$._PPP_._logToFile('=== onEncoderJobError CALLED ===');
+		$._PPP_._logToFile('jobID: ' + jobID + ' (type: ' + typeof jobID + ')');
+		$._PPP_._logToFile('errorMessage: ' + errorMessage);
+
+		var jobKey = String(jobID);
+		$._PPP_.updateEventPanel('onEncoderJobError called. jobKey = ' + jobKey + ', error = ' + errorMessage);
+
+		var eoName = Folder.fs === 'Macintosh' ? "PlugPlugExternalObject" : "PlugPlugExternalObject.dll";
+		var plugplugLibrary = new ExternalObject("lib:" + eoName);
+		if (plugplugLibrary) {
+			var eventObj = new CSXSEvent();
+			eventObj.type = "com.adobe.csxs.events.PProPanelRenderEvent";
+			eventObj.data = "Job " + jobKey + " failed, due to " + errorMessage + ".";
 			eventObj.dispatch();
+
+			// 압축 작업 에러 시 이벤트 발생
+			if ($._PPP_._compressionJobs && $._PPP_._compressionJobs[jobKey]) {
+				var jobInfo = $._PPP_._compressionJobs[jobKey];
+				var errorEvent = new CSXSEvent();
+				errorEvent.type = "com.lasker.compression.complete";
+				errorEvent.data = JSON.stringify({
+					jobID: jobKey,
+					success: false,
+					error: errorMessage,
+					inputPath: jobInfo.inputPath,
+					requestId: jobInfo.requestId
+				});
+				errorEvent.dispatch();
+				$._PPP_.updateEventPanel('Compression error event dispatched for requestId: ' + jobInfo.requestId);
+				delete $._PPP_._compressionJobs[jobKey];
+			}
 		}
 	},
 
 	onEncoderJobProgress : function (jobID, progress) {
-		$._PPP_.updateEventPanel('onEncoderJobProgress called. jobID = ' + jobID + '. progress = ' + progress + '.');
+		var jobKey = String(jobID);
+		// 진행률은 자주 호출되므로 10% 단위로만 로깅
+		if (progress % 10 === 0) {
+			$._PPP_._logToFile('onEncoderJobProgress: jobKey=' + jobKey + ', progress=' + progress + '%');
+		}
+
+		// 압축 작업 진행률 이벤트 발생
+		if ($._PPP_._compressionJobs && $._PPP_._compressionJobs[jobKey]) {
+			var jobInfo = $._PPP_._compressionJobs[jobKey];
+			var eoName = Folder.fs === 'Macintosh' ? "PlugPlugExternalObject" : "PlugPlugExternalObject.dll";
+			try {
+				var plugplugLibrary = new ExternalObject("lib:" + eoName);
+				if (plugplugLibrary) {
+					var eventObj = new CSXSEvent();
+					eventObj.type = "com.lasker.compression.progress";
+					eventObj.data = JSON.stringify({
+						jobID: jobKey,
+						progress: progress,
+						requestId: jobInfo.requestId
+					});
+					eventObj.dispatch();
+				}
+			} catch (e) {
+				// ignore progress event errors
+			}
+		}
 	},
 
 	onEncoderJobQueued : function (jobID) {
@@ -3658,6 +3763,358 @@ $._PPP_={
 	},
 
 	/**
+	 * exportFrameAtTime: Export a single frame at a specific timestamp
+	 * Uses exportFramePNG for best performance
+	 * @param {number} timeSec - Time in seconds
+	 * @param {string} cacheKey - Unique key for caching (e.g., "sequenceId_sceneId")
+	 * @returns {object} { success, path, cached }
+	 */
+	exportFrameAtTime: function(timeSec, cacheKey) {
+		try {
+			var seq = app.project.activeSequence;
+			if (!seq) {
+				return { success: false, error: "No active sequence" };
+			}
+
+			// Create cache folder
+			var cacheFolder = new Folder("~/Library/Caches/LaskerStudio/thumbnails");
+			if (!cacheFolder.exists) {
+				cacheFolder.create();
+			}
+
+			// Check if cached file exists
+			var outputPath = cacheFolder.fsName + "/" + cacheKey + ".png";
+			var outputFile = new File(outputPath);
+
+			if (outputFile.exists) {
+				// Return cached file
+				return {
+					success: true,
+					path: "file://" + outputPath,
+					cached: true
+				};
+			}
+
+			// Export frame using exportFramePNG (fastest method)
+			// exportFramePNG(time, filePath) - time is in ticks
+			var TICKS_PER_SECOND = 254016000000;
+			var timeTicks = Math.round(timeSec * TICKS_PER_SECOND);
+
+			var result = seq.exportFramePNG(timeTicks.toString(), outputPath);
+
+			if (result) {
+				return {
+					success: true,
+					path: "file://" + outputPath,
+					cached: false
+				};
+			} else {
+				return { success: false, error: "exportFramePNG failed" };
+			}
+		} catch (e) {
+			return { success: false, error: e.toString() };
+		}
+	},
+
+	/**
+	 * exportFramesBatch: Export multiple frames in batch for better performance
+	 * @param {Array} frames - Array of { timeSec, cacheKey }
+	 * @returns {object} { success, results: [{ cacheKey, path, cached, error }] }
+	 */
+	exportFramesBatch: function(frames) {
+		try {
+			var seq = app.project.activeSequence;
+			if (!seq) {
+				return { success: false, error: "No active sequence" };
+			}
+
+			// Parse frames if string
+			var framesList = typeof frames === 'string' ? JSON.parse(frames) : frames;
+			if (!framesList || !framesList.length) {
+				return { success: false, error: "No frames provided" };
+			}
+
+			// Create cache folder
+			var cacheFolder = new Folder("~/Library/Caches/LaskerStudio/thumbnails");
+			if (!cacheFolder.exists) {
+				cacheFolder.create();
+			}
+
+			// Get ticks per second from sequence settings
+			var ticksPerSecond = seq.timebase;
+			if (!ticksPerSecond) {
+				ticksPerSecond = 254016000000; // fallback
+			}
+
+			var results = [];
+
+			// Get frame rate (try different methods)
+			var frameRate = 30; // default
+			try {
+				if (seq.getSettings) {
+					var seqSettings = seq.getSettings();
+					if (seqSettings && seqSettings.videoFrameRate) {
+						frameRate = seqSettings.videoFrameRate.seconds ? (1 / seqSettings.videoFrameRate.seconds) : seqSettings.videoFrameRate;
+					}
+				}
+			} catch (e) {}
+
+			// Helper: Convert seconds to timecode string "HH;MM;SS;FF"
+			var secondsToTimecode = function(seconds) {
+				var totalFrames = Math.round(seconds * frameRate);
+				var hrs = Math.floor(totalFrames / (3600 * frameRate));
+				var mins = Math.floor((totalFrames % (3600 * frameRate)) / (60 * frameRate));
+				var secs = Math.floor((totalFrames % (60 * frameRate)) / frameRate);
+				var frames = totalFrames % Math.round(frameRate);
+
+				var pad = function(n) { return n < 10 ? '0' + n : '' + n; };
+				return pad(hrs) + ';' + pad(mins) + ';' + pad(secs) + ';' + pad(frames);
+			};
+
+			for (var i = 0; i < framesList.length; i++) {
+				var frame = framesList[i];
+				var timeSec = frame.timeSec;
+				var cacheKey = frame.cacheKey;
+				var trackIndex = frame.trackIndex !== undefined ? frame.trackIndex : 0; // 0-based track index
+
+				var outputPath = cacheFolder.fsName + "/" + cacheKey + ".png";
+				var outputFile = new File(outputPath);
+
+				if (outputFile.exists) {
+					// Already cached
+					results.push({
+						cacheKey: cacheKey,
+						path: "file://" + outputPath,
+						cached: true
+					});
+				} else {
+					// Find the clip at this time on the specific track and return its media path
+					// The frontend will use HTML5 video to extract the thumbnail
+					var mediaInfo = null;
+
+					try {
+						// Look only at the specified video track
+						if (seq.videoTracks && seq.videoTracks.numTracks > trackIndex) {
+							var track = seq.videoTracks[trackIndex];
+							if (track && track.clips && track.clips.numItems > 0) {
+								for (var c = 0; c < track.clips.numItems; c++) {
+									var clip = track.clips[c];
+									if (clip) {
+										// Get clip start and end in sequence
+										var clipStart = clip.start ? (clip.start.seconds || 0) : 0;
+										var clipEnd = clip.end ? (clip.end.seconds || 0) : 0;
+
+										// Check if timeSec falls within this clip
+										if (timeSec >= clipStart && timeSec < clipEnd) {
+											if (clip.projectItem && clip.projectItem.getMediaPath) {
+												var mediaPath = clip.projectItem.getMediaPath();
+												if (mediaPath) {
+													// Calculate time offset within clip
+													// inPoint is the source media time where the clip starts
+													var clipInPoint = clip.inPoint ? (clip.inPoint.seconds || 0) : 0;
+													var offsetInClip = timeSec - clipStart;
+													var timeInMedia = clipInPoint + offsetInClip;
+
+													mediaInfo = {
+														mediaPath: mediaPath,
+														timeInMedia: timeInMedia,
+														debug: {
+															clipStart: clipStart,
+															clipEnd: clipEnd,
+															clipInPoint: clipInPoint,
+															requestedTime: timeSec,
+															offsetInClip: offsetInClip
+														}
+													};
+													break;
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					} catch (e) {}
+
+					if (mediaInfo) {
+						results.push({
+							cacheKey: cacheKey,
+							mediaPath: "file://" + mediaInfo.mediaPath,
+							timeInMedia: mediaInfo.timeInMedia,
+							needsVideoExtract: true,
+							debug: mediaInfo.debug
+						});
+					} else {
+						results.push({
+							cacheKey: cacheKey,
+							error: "No clip found at time " + timeSec
+						});
+					}
+				}
+			}
+
+			// Count results manually (ExtendScript doesn't support .filter)
+			var exportedCount = 0;
+			var cachedCount = 0;
+			var failedCount = 0;
+			for (var j = 0; j < results.length; j++) {
+				if (results[j].error) {
+					failedCount++;
+				} else if (results[j].cached) {
+					cachedCount++;
+				} else {
+					exportedCount++;
+				}
+			}
+
+			return {
+				success: true,
+				results: results,
+				exported: exportedCount,
+				cached: cachedCount,
+				failed: failedCount
+			};
+		} catch (e) {
+			return { success: false, error: e.toString() };
+		}
+	},
+
+	/**
+	 * clearThumbnailCache: Clear all cached thumbnails
+	 * @returns {object} { success, deletedCount }
+	 */
+	clearThumbnailCache: function() {
+		try {
+			var cacheFolder = new Folder("~/Library/Caches/LaskerStudio/thumbnails");
+			if (!cacheFolder.exists) {
+				return { success: true, deletedCount: 0 };
+			}
+
+			var files = cacheFolder.getFiles("*.png");
+			var deletedCount = 0;
+
+			for (var i = 0; i < files.length; i++) {
+				if (files[i].remove()) {
+					deletedCount++;
+				}
+			}
+
+			return { success: true, deletedCount: deletedCount };
+		} catch (e) {
+			return { success: false, error: e.toString() };
+		}
+	},
+
+	/**
+	 * applyOkCuts: Enable/disable clips based on OK Cut selections
+	 * @param {object} data - { enable: [{sceneNumber, startSec, endSec, layer}], disable: [{sceneNumber, startSec, endSec}] }
+	 * @returns {object} { success, enabled, disabled, errors }
+	 */
+	applyOkCuts: function(data) {
+		try {
+			var seq = app.project.activeSequence;
+			if (!seq) {
+				return { success: false, error: "No active sequence" };
+			}
+
+			// Parse data if string
+			var cutData = typeof data === 'string' ? JSON.parse(data) : data;
+			if (!cutData) {
+				return { success: false, error: "No data provided" };
+			}
+
+			var scenesToEnable = cutData.enable || [];
+			var scenesToDisable = cutData.disable || [];
+
+			var enabledCount = 0;
+			var disabledCount = 0;
+			var errors = [];
+
+			// Helper function to convert layer name to track index
+			var layerToTrackIndex = function(layer) {
+				// 'v1' -> 0, 'v2' -> 1, etc.
+				if (!layer) return 0;
+				var match = layer.match(/v(\d+)/i);
+				if (match) {
+					return parseInt(match[1], 10) - 1;
+				}
+				return 0;
+			};
+
+			// Helper function to find and set disabled state for clips overlapping a time range
+			var setClipsDisabled = function(startSec, endSec, trackIndex, disabled) {
+				var count = 0;
+
+				if (!seq.videoTracks || seq.videoTracks.numTracks <= trackIndex) {
+					return count;
+				}
+
+				var track = seq.videoTracks[trackIndex];
+				if (!track || !track.clips) {
+					return count;
+				}
+
+				var numClips = track.clips.numItems;
+				for (var i = 0; i < numClips; i++) {
+					var clip = track.clips[i];
+					if (!clip) continue;
+
+					try {
+						var clipStart = clip.start ? (clip.start.seconds || 0) : 0;
+						var clipEnd = clip.end ? (clip.end.seconds || 0) : 0;
+
+						// Check if clip overlaps with scene time range
+						// Clip overlaps if: clipStart < endSec AND clipEnd > startSec
+						if (clipStart < endSec && clipEnd > startSec) {
+							clip.disabled = disabled;
+							count++;
+						}
+					} catch (e) {
+						// Skip clips that can't be modified
+					}
+				}
+
+				return count;
+			};
+
+			// Process scenes to disable first (set disabled = true)
+			for (var i = 0; i < scenesToDisable.length; i++) {
+				var scene = scenesToDisable[i];
+				try {
+					// Disable on all available video tracks for this scene
+					for (var trackIdx = 0; trackIdx < seq.videoTracks.numTracks; trackIdx++) {
+						var count = setClipsDisabled(scene.startSec, scene.endSec, trackIdx, true);
+						disabledCount += count;
+					}
+				} catch (e) {
+					errors.push("Scene " + scene.sceneNumber + " disable error: " + e.toString());
+				}
+			}
+
+			// Process scenes to enable (set disabled = false on specific layer)
+			for (var j = 0; j < scenesToEnable.length; j++) {
+				var enableScene = scenesToEnable[j];
+				try {
+					var trackIndex = layerToTrackIndex(enableScene.layer);
+					var count = setClipsDisabled(enableScene.startSec, enableScene.endSec, trackIndex, false);
+					enabledCount += count;
+				} catch (e) {
+					errors.push("Scene " + enableScene.sceneNumber + " enable error: " + e.toString());
+				}
+			}
+
+			return {
+				success: true,
+				enabled: enabledCount,
+				disabled: disabledCount,
+				errors: errors
+			};
+		} catch (e) {
+			return { success: false, error: e.toString() };
+		}
+	},
+
+	/**
 	 * bytesToBase64: Convert binary bytes to base64 string
 	 * @param {string} bytes - Binary string
 	 * @returns {string} Base64 encoded string
@@ -3774,6 +4231,503 @@ $._PPP_={
 				error: e.toString(),
 				mediaFiles: [],
 				errors: []
+			};
+		}
+	},
+
+	/**
+	 * 압축 작업 추적용 내부 변수
+	 */
+	_compressionJobs: {},
+
+	/**
+	 * 디버그 로그를 파일에 저장
+	 */
+	_logToFile: function(message) {
+		try {
+			// /tmp 폴더에 직접 작성 (가장 확실한 경로)
+			var logPath = '/tmp/lasker_ame_debug.log';
+			var logFile = new File(logPath);
+			var opened = logFile.open('a');
+			if (opened) {
+				var timestamp = new Date().toISOString();
+				logFile.writeln('[' + timestamp + '] ' + message);
+				logFile.close();
+			}
+		} catch (e) {
+			// 로그 실패 무시
+		}
+	},
+
+	/**
+	 * compressVideoForUpload: 비디오 파일을 업로드용 저해상도로 압축
+	 * Adobe Media Encoder를 사용하여 비동기적으로 압축
+	 *
+	 * @param {string} inputPath - 원본 비디오 파일 경로
+	 * @param {string} outputDir - 출력 디렉토리 경로
+	 * @param {string} presetPath - AME 프리셋 파일 경로 (.epr)
+	 * @param {string} requestId - 요청 추적용 고유 ID
+	 * @returns {object} - { success, jobID, error }
+	 */
+	compressVideoForUpload: function(inputPath, outputDir, presetPath, requestId) {
+		// 로그 파일 직접 작성 테스트
+		try {
+			var testLogPath = '/tmp/lasker_ame_debug.log';
+			var testLogFile = new File(testLogPath);
+			var opened = testLogFile.open('a');
+			if (opened) {
+				testLogFile.writeln('[' + new Date().toISOString() + '] === compressVideoForUpload CALLED ===');
+				testLogFile.writeln('[' + new Date().toISOString() + '] inputPath: ' + inputPath);
+				testLogFile.writeln('[' + new Date().toISOString() + '] outputDir: ' + outputDir);
+				testLogFile.writeln('[' + new Date().toISOString() + '] presetPath: ' + presetPath);
+				testLogFile.writeln('[' + new Date().toISOString() + '] requestId: ' + requestId);
+				testLogFile.writeln('[' + new Date().toISOString() + '] Desktop path would be: ' + Folder.desktop.fsName);
+				testLogFile.close();
+			}
+		} catch (logErr) {
+			// 로그 실패 시 무시
+		}
+
+		try {
+			$._PPP_.updateEventPanel('compressVideoForUpload: Starting compression');
+			$._PPP_.updateEventPanel('Input: ' + inputPath);
+			$._PPP_.updateEventPanel('Output dir: ' + outputDir);
+			$._PPP_.updateEventPanel('Preset: ' + presetPath);
+
+			// 입력 파일 확인
+			var inputFile = new File(inputPath);
+			if (!inputFile.exists) {
+				return {
+					success: false,
+					error: 'Input file not found: ' + inputPath
+				};
+			}
+
+			// 출력 디렉토리 확인/생성
+			var outputFolder = new Folder(outputDir);
+			if (!outputFolder.exists) {
+				outputFolder.create();
+			}
+
+			// 프리셋 파일 확인
+			var presetFile = new File(presetPath);
+			if (!presetFile.exists) {
+				return {
+					success: false,
+					error: 'Preset file not found: ' + presetPath
+				};
+			}
+
+			// AME 실행 (app.encoder는 Premiere Pro 내장 기능)
+			$._PPP_.updateEventPanel('Launching Adobe Media Encoder...');
+			try {
+				app.encoder.launchEncoder();
+				// AME 시작 대기
+				$.sleep(3000);
+			} catch (launchErr) {
+				$._PPP_.updateEventPanel('AME launch error: ' + launchErr.toString());
+				return {
+					success: false,
+					error: 'Failed to launch Media Encoder: ' + launchErr.toString()
+				};
+			}
+
+			// 콜백 바인딩 (중복 방지)
+			try {
+				app.encoder.bind('onEncoderJobComplete', $._PPP_.onEncoderJobComplete);
+				app.encoder.bind('onEncoderJobError', $._PPP_.onEncoderJobError);
+				app.encoder.bind('onEncoderJobProgress', $._PPP_.onEncoderJobProgress);
+				app.encoder.bind('onEncoderJobQueued', $._PPP_.onEncoderJobQueued);
+			} catch (bindErr) {
+				// 이미 바인딩되어 있으면 무시
+			}
+
+			// 인코딩 작업 시작
+			var removeFromQueue = 1; // 완료 후 큐에서 제거
+			var jobID = app.encoder.encodeFile(
+				inputFile.fsName,
+				outputFolder.fsName,
+				presetPath,
+				removeFromQueue
+			);
+
+			$._PPP_._logToFile('=== encodeFile returned ===');
+			$._PPP_._logToFile('jobID from encodeFile: ' + jobID + ' (type: ' + typeof jobID + ')');
+
+			if (jobID) {
+				// 작업 추적 정보 저장 (문자열 키로 저장)
+				var jobKey = String(jobID);
+				$._PPP_._logToFile('Storing job with key: ' + jobKey);
+
+				$._PPP_._compressionJobs[jobKey] = {
+					inputPath: inputPath,
+					outputDir: outputDir,
+					requestId: requestId,
+					startTime: new Date().getTime()
+				};
+
+				// 저장 확인
+				var storedKeys = [];
+				for (var k in $._PPP_._compressionJobs) {
+					storedKeys.push(k);
+				}
+				$._PPP_._logToFile('After storage, all keys: ' + JSON.stringify(storedKeys));
+				$._PPP_._logToFile('Stored job info: ' + JSON.stringify($._PPP_._compressionJobs[jobKey]));
+
+				$._PPP_.updateEventPanel('Compression job queued. JobID: ' + jobID + ' (stored as: ' + jobKey + ')');
+
+				// 배치 시작
+				$._PPP_._logToFile('Starting batch...');
+				app.encoder.startBatch();
+				$._PPP_._logToFile('Batch started');
+
+				// 디버그: 저장된 모든 키 목록
+				var debugKeys = [];
+				for (var dk in $._PPP_._compressionJobs) {
+					debugKeys.push(dk);
+				}
+
+				return {
+					success: true,
+					jobID: jobKey,
+					message: 'Compression job started',
+					debug: {
+						storedKeys: debugKeys,
+						requestId: requestId,
+						jobKeyType: typeof jobKey
+					}
+				};
+			} else {
+				$._PPP_._logToFile('encodeFile returned null/undefined jobID');
+				return {
+					success: false,
+					error: 'Failed to queue encoding job'
+				};
+			}
+
+		} catch (e) {
+			$._PPP_.updateEventPanel('compressVideoForUpload error: ' + e.toString());
+			return {
+				success: false,
+				error: e.toString()
+			};
+		}
+	},
+
+	/**
+	 * getCompressionPresetPath: 플러그인에 포함된 압축 프리셋 경로 반환
+	 * @returns {string} - 프리셋 파일 경로
+	 */
+	getCompressionPresetPath: function() {
+		try {
+			// 플러그인 경로 탐색
+			var extensionPath = $.fileName; // 현재 스크립트 경로
+			var pluginFolder = new File(extensionPath).parent.parent; // jsx 폴더의 부모 (cep 폴더)
+			var presetPath = pluginFolder.fsName + '/presets/lowres-360p.epr';
+
+			var presetFile = new File(presetPath);
+			if (presetFile.exists) {
+				return presetPath;
+			}
+
+			// 대안 경로 시도
+			var altPath = pluginFolder.parent.fsName + '/presets/lowres-360p.epr';
+			var altFile = new File(altPath);
+			if (altFile.exists) {
+				return altPath;
+			}
+
+			return '';
+		} catch (e) {
+			return '';
+		}
+	},
+
+	/**
+	 * getTempFolder: 임시 폴더 경로 반환
+	 * @returns {string} - 임시 폴더 경로
+	 */
+	getTempFolder: function() {
+		return Folder.temp.fsName;
+	},
+
+	/**
+	 * exportSequenceDirect: 시퀀스를 프리미어 프로 내장 인코더로 직접 렌더링 (AME 없이)
+	 * @param {string} sequenceId - 시퀀스 ID (GUID)
+	 * @param {string} outputPath - 출력 파일 전체 경로 (예: /tmp/output.mp4)
+	 * @param {string} presetPath - 프리셋 파일 경로 (.epr)
+	 * @param {string} workAreaType - 렌더링 범위: 'entire', 'inout', 'workarea'
+	 * @returns {object} - { success, outputPath, error, duration }
+	 */
+	exportSequenceDirect: function(sequenceId, outputPath, presetPath, workAreaType) {
+		try {
+			$._PPP_.updateEventPanel('exportSequenceDirect: Starting direct export');
+			$._PPP_.updateEventPanel('Sequence ID: ' + sequenceId);
+			$._PPP_.updateEventPanel('Output: ' + outputPath);
+			$._PPP_.updateEventPanel('Preset: ' + presetPath);
+
+			// 시퀀스 찾기
+			var sequence = null;
+			for (var i = 0; i < app.project.sequences.numSequences; i++) {
+				var seq = app.project.sequences[i];
+				if (seq.sequenceID === sequenceId) {
+					sequence = seq;
+					break;
+				}
+			}
+
+			if (!sequence) {
+				// 활성 시퀀스 사용
+				sequence = app.project.activeSequence;
+				if (!sequence) {
+					return {
+						success: false,
+						error: 'No sequence found with ID: ' + sequenceId + ' and no active sequence'
+					};
+				}
+			}
+
+			$._PPP_.updateEventPanel('Found sequence: ' + sequence.name);
+
+			// 프리셋 파일 확인
+			var presetFile = new File(presetPath);
+			if (!presetFile.exists) {
+				return {
+					success: false,
+					error: 'Preset file not found: ' + presetPath
+				};
+			}
+
+			// 출력 폴더 확인/생성
+			var outputFile = new File(outputPath);
+			var outputFolder = outputFile.parent;
+			if (!outputFolder.exists) {
+				outputFolder.create();
+			}
+
+			// 렌더링 범위 결정
+			var encodeType;
+			switch (workAreaType) {
+				case 'inout':
+					encodeType = app.encoder.ENCODE_IN_TO_OUT;
+					break;
+				case 'workarea':
+					encodeType = app.encoder.ENCODE_WORKAREA;
+					break;
+				case 'entire':
+				default:
+					encodeType = app.encoder.ENCODE_ENTIRE;
+					break;
+			}
+
+			$._PPP_.updateEventPanel('Starting exportAsMediaDirect with encodeType: ' + workAreaType);
+
+			// 시작 시간 기록
+			var startTime = new Date().getTime();
+
+			// 직접 렌더링 (블로킹 - 완료까지 대기)
+			var result = sequence.exportAsMediaDirect(
+				outputPath,
+				presetFile.fsName,
+				encodeType
+			);
+
+			var endTime = new Date().getTime();
+			var duration = (endTime - startTime) / 1000; // 초 단위
+
+			$._PPP_.updateEventPanel('exportAsMediaDirect result: ' + result);
+			$._PPP_.updateEventPanel('Encoding duration: ' + duration + ' seconds');
+
+			if (result) {
+				// 출력 파일 확인
+				var exportedFile = new File(outputPath);
+				if (exportedFile.exists) {
+					return {
+						success: true,
+						outputPath: outputPath,
+						duration: duration,
+						fileSize: exportedFile.length
+					};
+				} else {
+					return {
+						success: false,
+						error: 'Export reported success but output file not found',
+						duration: duration
+					};
+				}
+			} else {
+				return {
+					success: false,
+					error: 'exportAsMediaDirect returned false',
+					duration: duration
+				};
+			}
+
+		} catch (e) {
+			$._PPP_.updateEventPanel('exportSequenceDirect error: ' + e.toString());
+			return {
+				success: false,
+				error: e.toString()
+			};
+		}
+	},
+
+	/**
+	 * exportClipDirect: 특정 트랙의 특정 시간 범위만 Direct 렌더링
+	 * - 해당 트랙만 활성화하고 나머지 트랙은 뮤트
+	 * - In/Out 포인트를 지정된 범위로 설정
+	 * - 렌더링 후 원래 상태로 복원
+	 *
+	 * @param {string} sequenceId - 시퀀스 ID (GUID)
+	 * @param {number} trackIndex - 비디오 트랙 인덱스 (0부터 시작)
+	 * @param {number} startTimeSec - 시작 시간 (초)
+	 * @param {number} endTimeSec - 끝 시간 (초)
+	 * @param {string} outputPath - 출력 파일 전체 경로
+	 * @param {string} presetPath - 프리셋 파일 경로
+	 * @returns {object} - { success, outputPath, duration, fileSize, error }
+	 */
+	exportClipDirect: function(sequenceId, trackIndex, startTimeSec, endTimeSec, outputPath, presetPath) {
+		try {
+			$._PPP_.updateEventPanel('exportClipDirect: Starting clip export');
+			$._PPP_.updateEventPanel('Track: ' + trackIndex + ', Time: ' + startTimeSec + ' ~ ' + endTimeSec);
+
+			// 시퀀스 찾기
+			var sequence = null;
+			for (var i = 0; i < app.project.sequences.numSequences; i++) {
+				var seq = app.project.sequences[i];
+				if (seq.sequenceID === sequenceId) {
+					sequence = seq;
+					break;
+				}
+			}
+
+			if (!sequence) {
+				sequence = app.project.activeSequence;
+				if (!sequence) {
+					return {
+						success: false,
+						error: 'No sequence found'
+					};
+				}
+			}
+
+			// 프리셋 파일 확인
+			var presetFile = new File(presetPath);
+			if (!presetFile.exists) {
+				return {
+					success: false,
+					error: 'Preset file not found: ' + presetPath
+				};
+			}
+
+			// 출력 폴더 확인/생성
+			var outputFile = new File(outputPath);
+			var outputFolder = outputFile.parent;
+			if (!outputFolder.exists) {
+				outputFolder.create();
+			}
+
+			// ========== 현재 상태 저장 ==========
+			var savedMuteStates = [];
+			var savedInPoint = null;
+			var savedOutPoint = null;
+
+			// 비디오 트랙 뮤트 상태 저장
+			for (var t = 0; t < sequence.videoTracks.numTracks; t++) {
+				var track = sequence.videoTracks[t];
+				savedMuteStates.push(track.isMuted());
+			}
+
+			// In/Out 포인트 저장
+			try {
+				savedInPoint = sequence.getInPoint();
+				savedOutPoint = sequence.getOutPoint();
+			} catch (e) {
+				$._PPP_.updateEventPanel('Could not save In/Out points: ' + e.toString());
+			}
+
+			// ========== 트랙 뮤트 설정 ==========
+			// 모든 비디오 트랙 뮤트
+			for (var t = 0; t < sequence.videoTracks.numTracks; t++) {
+				sequence.videoTracks[t].setMute(1);
+			}
+			// 해당 트랙만 활성화
+			if (trackIndex >= 0 && trackIndex < sequence.videoTracks.numTracks) {
+				sequence.videoTracks[trackIndex].setMute(0);
+			}
+
+			$._PPP_.updateEventPanel('Track ' + trackIndex + ' activated, others muted');
+
+			// ========== In/Out 포인트 설정 ==========
+			sequence.setInPoint(startTimeSec);
+			sequence.setOutPoint(endTimeSec);
+
+			$._PPP_.updateEventPanel('In/Out set: ' + startTimeSec + ' ~ ' + endTimeSec);
+
+			// ========== Direct 렌더링 ==========
+			var renderStartTime = new Date().getTime();
+
+			var result = sequence.exportAsMediaDirect(
+				outputPath,
+				presetFile.fsName,
+				app.encoder.ENCODE_IN_TO_OUT  // In/Out 범위만 렌더링
+			);
+
+			var renderEndTime = new Date().getTime();
+			var renderDuration = (renderEndTime - renderStartTime) / 1000;
+
+			$._PPP_.updateEventPanel('Render result: ' + result + ', Duration: ' + renderDuration + 's');
+
+			// ========== 원래 상태로 복원 ==========
+			// 트랙 뮤트 상태 복원
+			for (var t = 0; t < sequence.videoTracks.numTracks; t++) {
+				sequence.videoTracks[t].setMute(savedMuteStates[t] ? 1 : 0);
+			}
+
+			// In/Out 포인트 복원
+			try {
+				if (savedInPoint !== null && savedOutPoint !== null) {
+					sequence.setInPoint(savedInPoint);
+					sequence.setOutPoint(savedOutPoint);
+				}
+			} catch (e) {
+				$._PPP_.updateEventPanel('Could not restore In/Out points: ' + e.toString());
+			}
+
+			$._PPP_.updateEventPanel('Original state restored');
+
+			// ========== 결과 반환 ==========
+			if (result) {
+				var exportedFile = new File(outputPath);
+				if (exportedFile.exists) {
+					return {
+						success: true,
+						outputPath: outputPath,
+						duration: renderDuration,
+						fileSize: exportedFile.length,
+						trackIndex: trackIndex,
+						timeRange: { start: startTimeSec, end: endTimeSec }
+					};
+				} else {
+					return {
+						success: false,
+						error: 'Export reported success but output file not found',
+						duration: renderDuration
+					};
+				}
+			} else {
+				return {
+					success: false,
+					error: 'exportAsMediaDirect returned false',
+					duration: renderDuration
+				};
+			}
+
+		} catch (e) {
+			$._PPP_.updateEventPanel('exportClipDirect error: ' + e.toString());
+			return {
+				success: false,
+				error: e.toString()
 			};
 		}
 	},

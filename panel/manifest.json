@@ -1,0 +1,36 @@
+{
+  "version": "0.0.1",
+  "timestamp": 1765130820098,
+  "files": {
+    "main": {
+      "js": "assets/main-Bz0tUc27.js",
+      "css": "assets/index-CMNT3zk6.css"
+    },
+    "debug": {
+      "js": "assets/debug-B51QW1vn.js",
+      "css": "assets/index-CMNT3zk6.css"
+    }
+  },
+  "assets": {
+    "presets/README.md": {
+      "hash": "829b9806be684c530314781fe2c39582",
+      "size": 1728
+    },
+    "presets/lowres-360p.epr": {
+      "hash": "a979733bf3473ef084becfe13b6f79dc",
+      "size": 34996
+    },
+    "jsx/index.js": {
+      "hash": "7fb9eb8b217aec93a7c3d3507d9a690b",
+      "size": 241866
+    },
+    "jsx/json2.js": {
+      "hash": "0d5be35ed9b20fdf59d82781c164818e",
+      "size": 5657
+    },
+    "jsx/ppro.jsx": {
+      "hash": "84ddb1e90ffbde2ffc3cacc04a64ca5d",
+      "size": 227111
+    }
+  }
+}
