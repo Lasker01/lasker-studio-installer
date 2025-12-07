@@ -45,10 +45,69 @@ else {
     <title>Lasker Studio CEP</title>
     
     
-    <link rel="stylesheet" crossorigin href="../assets/index-CMNT3zk6.css">
+    
   </head>
   <body>
     <div id="app"></div>
-    <script type="module" src="../assets/main-KMBoM2dV.js"></script>
+    
+  
+<script>
+(function() {
+  var CDN = 'https://lasker-studio-cep.vercel.app';
+  var PANEL = 'main';
+  var MANIFEST_URL = CDN + '/manifest.json?t=' + Date.now();
+
+  // Fetch manifest and load assets from CDN
+  fetch(MANIFEST_URL)
+    .then(function(res) { return res.json(); })
+    .then(function(manifest) {
+      var files = manifest.files[PANEL];
+      if (!files) {
+        console.error('[CDN Loader] Panel not found:', PANEL);
+        return;
+      }
+
+      // Load CSS
+      var link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = CDN + '/' + files.css;
+      document.head.appendChild(link);
+
+      // Load JS
+      var script = document.createElement('script');
+      script.type = 'module';
+      script.src = CDN + '/' + files.js;
+      document.body.appendChild(script);
+
+      console.log('[CDN Loader] Loaded from CDN:', files);
+    })
+    .catch(function(err) {
+      console.error('[CDN Loader] Failed to load manifest:', err);
+      // Fallback: manifest.json에서 로컬 파일 정보 사용
+      loadLocalFallback();
+    });
+
+  function loadLocalFallback() {
+    fetch('../manifest.json')
+      .then(function(res) { return res.json(); })
+      .then(function(manifest) {
+        var files = manifest.files[PANEL];
+        if (!files) return;
+
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = '../' + files.css;
+        document.head.appendChild(link);
+
+        var script = document.createElement('script');
+        script.type = 'module';
+        script.src = '../' + files.js;
+        document.body.appendChild(script);
+
+        console.log('[CDN Loader] Fallback to local:', files);
+      });
+  }
+})();
+</script>
   </body>
 </html>
