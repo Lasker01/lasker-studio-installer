@@ -55,6 +55,9 @@ if (!fs.existsSync(distDir)) {
 }
 
 // ISS 파일 동적 생성 (UTF-8 BOM)
+// AppId의 { } 를 {{ }} 로 이스케이프
+const escapedAppId = config.appId.replace(/\{/g, '{{').replace(/\}/g, '}}');
+
 const issTemplate = `; Lasker Studio - Adobe CEP Extension Installer
 ; Auto-generated - DO NOT EDIT MANUALLY
 
@@ -65,7 +68,7 @@ const issTemplate = `; Lasker Studio - Adobe CEP Extension Installer
 #define PanelID "${config.panelName}"
 
 [Setup]
-AppId=${config.appId}
+AppId=${escapedAppId}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
