@@ -1,14 +1,10 @@
 {
   "version": "0.0.1",
-  "timestamp": 1765136616812,
+  "timestamp": 1765138230468,
   "files": {
     "main": {
-      "js": "assets/main-BFYJ5SRs.js",
-      "css": "assets/index-CMNT3zk6.css"
-    },
-    "debug": {
-      "js": "assets/debug-CAgtF_HW.js",
-      "css": "assets/index-CMNT3zk6.css"
+      "js": "assets/main-C0nink1I.js",
+      "css": "assets/main-CMNT3zk6.css"
     }
   },
   "assets": {
