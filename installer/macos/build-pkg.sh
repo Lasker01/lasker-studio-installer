@@ -91,10 +91,14 @@ if [ -d "$INSTALL_DIR" ]; then
     chmod -R 755 "$INSTALL_DIR"
 fi
 
-# CEP Debug Mode 활성화 (CSXS.10, CSXS.11 지원)
-for version in 10 11 12; do
-    defaults write com.adobe.CSXS.${version} PlayerDebugMode 1 2>/dev/null || true
-done
+# CEP Debug Mode 활성화 (CSXS 9, 10, 11, 12 지원)
+# postinstall은 root로 실행되므로 실제 로그인 사용자를 찾아서 설정해야 함
+CURRENT_USER=$(stat -f "%Su" /dev/console)
+if [ -n "$CURRENT_USER" ] && [ "$CURRENT_USER" != "root" ]; then
+    for version in 9 10 11 12; do
+        sudo -u "$CURRENT_USER" defaults write com.adobe.CSXS.${version} PlayerDebugMode 1 2>/dev/null || true
+    done
+fi
 
 exit 0
 POSTINSTALL
