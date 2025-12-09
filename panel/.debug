@@ -5,9 +5,4 @@
       <Host Name="PPRO" Port="8860"/>
     </HostList>
   </Extension>
-  <Extension Id="com.lasker.studio.cep.debug">
-    <HostList>
-      <Host Name="PPRO" Port="8861"/>
-    </HostList>
-  </Extension>
 </ExtensionList>
