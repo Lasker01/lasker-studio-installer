@@ -1,6 +1,6 @@
 {
   "version": "0.0.1",
-  "timestamp": 1765272707800,
+  "timestamp": 1765273526671,
   "files": {
     "main": {
       "js": "assets/main-1t1FdZwb.js",
@@ -17,8 +17,8 @@
       "size": 34996
     },
     "jsx/index.js": {
-      "hash": "ffe800c8ea54bb03b8862d38e49b0d45",
-      "size": 242455
+      "hash": "69ab02384db9ee0d3b0bc37db75f1739",
+      "size": 242674
     },
     "jsx/json2.js": {
       "hash": "0d5be35ed9b20fdf59d82781c164818e",

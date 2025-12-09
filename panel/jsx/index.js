@@ -7242,9 +7242,14 @@ var getAppNameSafely = function getAppNameSafely() {
   }
   return "unknown";
 };
-switch (getAppNameSafely()) {
+var detectedApp = getAppNameSafely();
+
+// Always register ppro for Premiere Pro or unknown (since this plugin is Premiere-specific)
+switch (detectedApp) {
   case "premierepro":
   case "premiereprobeta":
+  case "unknown":
+    // For unknown, assume Premiere Pro since this is a Premiere Pro plugin
     host[ns] = ppro;
     break;
 }
