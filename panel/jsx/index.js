@@ -7197,6 +7197,12 @@ var getAppNameSafely = function getAppNameSafely() {
   if (isBridgeTalkWorking) {
     return BridgeTalk.appName;
   } else if (app) {
+    // Premiere Pro specific checks first (most reliable)
+    
+    if (exists(app.project) && exists(app.project.sequences)) {
+      // This is definitely Premiere Pro
+      return "premierepro";
+    }
     
     if (exists(app.name)) {
       
@@ -7206,6 +7212,7 @@ var getAppNameSafely = function getAppNameSafely() {
       if (compare(name, "audition")) return "audition";
       if (compare(name, "bridge")) return "bridge";
       if (compare(name, "indesign")) return "indesign";
+      if (compare(name, "premiere")) return "premierepro";
     }
     
     if (exists(app.appName)) {
@@ -7213,16 +7220,24 @@ var getAppNameSafely = function getAppNameSafely() {
       var appName = app.appName;
       if (compare(appName, "after effects")) return "aftereffects";
       if (compare(appName, "animate")) return "animate";
+      if (compare(appName, "premiere")) return "premierepro";
     }
     
     if (exists(app.path)) {
       
       var path = app.path;
       if (compare(path, "premiere")) return "premierepro";
+      // Windows path format check
+      if (compare(path, "Adobe Premiere Pro")) return "premierepro";
     }
     
     if (exists(app.getEncoderHost) && exists(AMEFrontendEvent)) {
       return "ame";
+    }
+    // Additional Premiere Pro fallback - check for version property
+    
+    if (exists(app.version) && exists(app.project)) {
+      return "premierepro";
     }
   }
   return "unknown";
