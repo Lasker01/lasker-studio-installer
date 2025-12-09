@@ -104,6 +104,7 @@ english.WelcomeLabel2=This will install Lasker Studio v{#MyAppVersion}.%n%nAI-po
 
 [Files]
 Source: "..\\..\\panel\\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\\..\\panel\\.debug"; DestDir: "{app}"; Flags: ignoreversion
 
 [Registry]
 ; CEP Debug Mode 활성화

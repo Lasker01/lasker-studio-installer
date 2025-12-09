@@ -76,9 +76,10 @@ mkdir -p "$DIST_DIR"
 PAYLOAD_INSTALL_DIR="$PAYLOAD_DIR/Library/Application Support/Adobe/CEP/extensions/$PANEL_NAME"
 mkdir -p "$PAYLOAD_INSTALL_DIR"
 
-# 패널 파일 복사
+# 패널 파일 복사 (숨김 파일 포함)
 echo -e "${YELLOW}Copying panel files...${NC}"
 cp -R "$PANEL_DIR/"* "$PAYLOAD_INSTALL_DIR/"
+cp -R "$PANEL_DIR/".* "$PAYLOAD_INSTALL_DIR/" 2>/dev/null || true
 
 # postinstall 스크립트 생성
 cat > "$SCRIPTS_DIR/postinstall" << 'POSTINSTALL'
