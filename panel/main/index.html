@@ -67,39 +67,19 @@ else {
 (function() {
   var CDN = 'https://lasker-studio-cep.vercel.app';
   var PANEL = 'main';
-  var MANIFEST_URL = CDN + '/manifest.json?t=' + Date.now();
 
-  // Fetch manifest and load assets from CDN
-  fetch(MANIFEST_URL)
-    .then(function(res) { return res.json(); })
-    .then(function(manifest) {
-      var files = manifest.files[PANEL];
-      if (!files) {
-        console.error('[CDN Loader] Panel not found:', PANEL);
-        return;
-      }
+  // CDN에서 로더 스크립트 가져오기 (cache buster로 항상 최신 버전)
+  var loaderUrl = CDN + '/loader.js?t=' + Date.now() + '&panel=' + PANEL;
+  var script = document.createElement('script');
+  script.src = loaderUrl;
+  script.onerror = function() {
+    console.error('[CDN Loader] Failed to load loader.js, using fallback');
+    loadFallback();
+  };
+  document.head.appendChild(script);
 
-      // Load CSS
-      var link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = CDN + '/' + files.css;
-      document.head.appendChild(link);
-
-      // Load JS
-      var script = document.createElement('script');
-      script.type = 'module';
-      script.src = CDN + '/' + files.js;
-      document.body.appendChild(script);
-
-      console.log('[CDN Loader] Loaded from CDN:', files);
-    })
-    .catch(function(err) {
-      console.error('[CDN Loader] Failed to load manifest:', err);
-      // Fallback: manifest.json에서 로컬 파일 정보 사용
-      loadLocalFallback();
-    });
-
-  function loadLocalFallback() {
+  function loadFallback() {
+    // 로컬 fallback
     fetch('../manifest.json')
       .then(function(res) { return res.json(); })
       .then(function(manifest) {
