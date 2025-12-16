@@ -158,12 +158,20 @@ console.log('Generated installer.iss with UTF-8 BOM');
 try {
   console.log('Compiling installer...');
   execSync(`"${isccPath}" "${issPath}"`, { stdio: 'inherit' });
+
+  // 고정 파일명 복사 (직접 다운로드 링크용)
+  const versionedFile = path.join(distDir, `LaskerStudio-${config.version}-Setup.exe`);
+  const fixedFile = path.join(distDir, 'LaskerStudio-Setup.exe');
+  fs.copyFileSync(versionedFile, fixedFile);
+  console.log('Created fixed filename copy for direct download link');
+
   console.log('');
   console.log('========================================');
   console.log('  Build Complete!');
   console.log('========================================');
   console.log('');
   console.log(`Output: ${distDir}\\LaskerStudio-${config.version}-Setup.exe`);
+  console.log(`        ${distDir}\\LaskerStudio-Setup.exe (fixed name)`);
 } catch (error) {
   console.error('Error building installer:', error.message);
   process.exit(1);

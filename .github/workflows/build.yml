@@ -105,15 +105,22 @@ jobs:
           body: |
             ## Lasker Studio v${{ steps.version.outputs.VERSION }}
 
+            ### 다운로드 링크
+
+            | OS | 직접 다운로드 |
+            |---|---|
+            | **macOS** | [Lasker-Studio-Installer.pkg](https://github.com/Lasker01/lasker-studio-installer/releases/latest/download/Lasker-Studio-Installer.pkg) |
+            | **Windows** | [LaskerStudio-Setup.exe](https://github.com/Lasker01/lasker-studio-installer/releases/latest/download/LaskerStudio-Setup.exe) |
+
             ### 설치 방법
 
             **macOS:**
-            1. `Lasker-Studio-${{ steps.version.outputs.VERSION }}-Installer.pkg` 다운로드
+            1. `.pkg` 파일 다운로드
             2. 더블클릭하여 설치
             3. Adobe Premiere Pro 재시작
 
             **Windows:**
-            1. `LaskerStudio-${{ steps.version.outputs.VERSION }}-Setup.exe` 다운로드
+            1. `.exe` 파일 다운로드
             2. 실행하여 설치
             3. Adobe Premiere Pro 재시작
 

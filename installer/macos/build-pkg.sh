@@ -184,12 +184,17 @@ fi
 # 최종 제품 패키지 빌드
 echo -e "${YELLOW}Building product package...${NC}"
 OUTPUT_FILE="$DIST_DIR/${DISPLAY_NAME// /-}-${VERSION}-Installer.pkg"
+FIXED_OUTPUT_FILE="$DIST_DIR/${DISPLAY_NAME// /-}-Installer.pkg"
 
 productbuild \
     --distribution "$BUILD_DIR/distribution.xml" \
     --resources "$RESOURCES_DIR" \
     --package-path "$BUILD_DIR" \
     "$OUTPUT_FILE"
+
+# 고정 파일명 복사 (직접 다운로드 링크용)
+cp "$OUTPUT_FILE" "$FIXED_OUTPUT_FILE"
+echo -e "${GREEN}Created fixed filename copy for direct download link${NC}"
 
 # 코드 서명 (인증서가 있는 경우)
 if [ -n "$INSTALLER_CERT_NAME" ]; then
@@ -211,6 +216,7 @@ echo -e "${GREEN}  Build Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo -e "Output: ${BLUE}$OUTPUT_FILE${NC}"
+echo -e "        ${BLUE}$FIXED_OUTPUT_FILE${NC} (fixed name)"
 echo ""
 echo "Install with:"
 echo -e "  ${YELLOW}sudo installer -pkg \"$OUTPUT_FILE\" -target /${NC}"
