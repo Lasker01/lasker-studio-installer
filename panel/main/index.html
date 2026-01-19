@@ -106,38 +106,99 @@ else {
 (function() {
   var CDN = 'https://lasker-studio-cep.vercel.app';
   var PANEL = 'main';
+  var cacheBuster = Date.now();
 
-  // CDN에서 로더 스크립트 가져오기 (cache buster로 항상 최신 버전)
-  var loaderUrl = CDN + '/loader.js?t=' + Date.now() + '&panel=' + PANEL;
-  var script = document.createElement('script');
-  script.src = loaderUrl;
-  script.onerror = function() {
-    console.error('[CDN Loader] Failed to load loader.js, using fallback');
-    loadFallback();
-  };
-  document.head.appendChild(script);
+  // 로딩 상태 업데이트
+  function updateLoadingStatus(text) {
+    var loadingText = document.querySelector('.loading-text');
+    if (loadingText) loadingText.textContent = text;
+  }
 
-  function loadFallback() {
-    // 로컬 fallback
+  // 에셋 로드 함수
+  function loadAssets(baseUrl, files, isLocal) {
+    var prefix = isLocal ? '../' : baseUrl + '/';
+    var suffix = isLocal ? '' : '?t=' + cacheBuster;
+
+    // CSS 로드
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = prefix + files.css + suffix;
+    link.setAttribute('data-cdn-loader', 'true');
+    document.head.appendChild(link);
+
+    // JS 로드
+    var script = document.createElement('script');
+    script.type = 'module';
+    script.src = prefix + files.js + suffix;
+    script.setAttribute('data-cdn-loader', 'true');
+    document.body.appendChild(script);
+
+    console.log('[CDN Loader] ' + (isLocal ? 'Local' : 'CDN') + ' assets loaded:', files);
+  }
+
+  // CDN manifest fetch 시도 -> 실패 시 로컬 사용
+  function loadFromCDNManifest() {
+    updateLoadingStatus('Checking for updates...');
+
+    fetch(CDN + '/manifest.json?t=' + cacheBuster, { cache: 'no-store' })
+      .then(function(res) {
+        if (!res.ok) throw new Error('CDN manifest fetch failed: ' + res.status);
+        return res.json();
+      })
+      .then(function(manifest) {
+        var files = manifest.files[PANEL];
+        if (!files) {
+          console.error('[CDN Loader] Panel not found in manifest');
+          return loadFromLocal();
+        }
+
+        // 버전 정보 저장
+        window.__LASKER_VERSION__ = manifest.version || '0.0.0';
+        window.__LASKER_MANIFEST__ = manifest;
+        console.log('[CDN Loader] Version:', window.__LASKER_VERSION__);
+
+        updateLoadingStatus('Loading application...');
+        loadAssets(CDN, files, false);
+      })
+      .catch(function(err) {
+        console.warn('[CDN Loader] CDN manifest failed, using local:', err.message);
+        loadFromLocal();
+      });
+  }
+
+  // 로컬 fallback
+  function loadFromLocal() {
+    updateLoadingStatus('Loading from local...');
+
     fetch('../manifest.json')
       .then(function(res) { return res.json(); })
       .then(function(manifest) {
         var files = manifest.files[PANEL];
-        if (!files) return;
+        if (!files) {
+          updateLoadingStatus('Error: Panel not found');
+          return;
+        }
 
-        var link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = '../' + files.css;
-        document.head.appendChild(link);
+        window.__LASKER_VERSION__ = manifest.version || '0.0.0';
+        window.__LASKER_MANIFEST__ = manifest;
 
-        var script = document.createElement('script');
-        script.type = 'module';
-        script.src = '../' + files.js;
-        document.body.appendChild(script);
-
-        console.log('[CDN Loader] Fallback to local:', files);
+        loadAssets('', files, true);
+      })
+      .catch(function(err) {
+        console.error('[CDN Loader] Local manifest also failed:', err);
+        updateLoadingStatus('Error loading plugin');
       });
   }
+
+  // 먼저 CDN loader.js 시도
+  var loaderUrl = CDN + '/loader.js?t=' + cacheBuster + '&panel=' + PANEL;
+  var script = document.createElement('script');
+  script.src = loaderUrl;
+  script.onerror = function() {
+    console.warn('[CDN Loader] loader.js failed, trying CDN manifest directly');
+    loadFromCDNManifest();
+  };
+  document.head.appendChild(script);
 })();
 </script>
   </body>
